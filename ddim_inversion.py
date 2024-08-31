@@ -14,6 +14,7 @@ from diffusers import StableDiffusionPipeline, DDIMScheduler
 
 from attention_control import AttentionStore
 import ptp_utils
+# from null_inversion import tokenizer
 
 NUM_DDIM_STEPS = 50
 GUIDANCE_SCALE = 5.5
@@ -38,11 +39,8 @@ negative_prompt = 'blurry, ugly, stock photo'
 # im = pipe(prompt, negative_prompt=negative_prompt).images[0]
 # im.resize((256, 256))
 # im.show()
-timesteps = pipe.scheduler.timesteps.cpu()
-alphas = pipe.scheduler.alphas_cumprod[timesteps]
-
-
 tokenizer = pipe.tokenizer
+
 
 @torch.no_grad()
 def sample(prompt, start_step=0, start_latents=None,
@@ -89,16 +87,14 @@ def sample(prompt, start_step=0, start_latents=None,
         predicted_x0 = (latents - (1 - alpha_t).sqrt() * noise_pred) / alpha_t.sqrt()
         direction_pointing_to_xt = (1 - alpha_t_prev).sqrt() * noise_pred
         latents = alpha_t_prev.sqrt() * predicted_x0 + direction_pointing_to_xt
+        # 注意力记录
+        latents = controller.step_callback(latents)
 
     images = pipe.decode_latents(latents)
     images = pipe.numpy_to_pil(images)
 
     return images
 
-
-input_image = load_image('pexels-photo-8306128.jpeg', size=(512, 512))
-input_image_prompt = "Photograph of a puppy on the grass"
-edit_prompt = "Photograph of a grey cat on the grass"
 
 @torch.no_grad()
 def invert(start_latents, prompt, guidance_scale=3.5, num_inference_steps=80,
@@ -163,14 +159,15 @@ def aggregate_attention(attention_store: AttentionStore, res: int, from_where: L
     for location in from_where:
         for item in attention_maps[f"{location}_{'cross' if is_cross else 'self'}"]:
             if item.shape[1] == num_pixels:
-                cross_maps = item.reshape(len(prompts), -1, res, res, item.shape[-1])[select]
+                cross_maps = item.reshape(len([input_image_prompt]), -1, res, res, item.shape[-1])[select]
                 out.append(cross_maps)
     out = torch.cat(out, dim=0)
     out = out.sum(0) / out.shape[0]
     return out.cpu()
 
+
 def show_cross_attention(attention_store: AttentionStore, res: int, from_where: List[str], select: int = 0):
-    tokens = tokenizer.encode(prompts[select])
+    tokens = tokenizer.encode(input_image_prompt)
     decoder = tokenizer.decode
     attention_maps = aggregate_attention(attention_store, res, from_where, True, select)
     images = []
@@ -186,18 +183,19 @@ def show_cross_attention(attention_store: AttentionStore, res: int, from_where: 
 
 
 def edit(controller, input_image, input_image_prompt, edit_prompt, num_steps=100, start_step=30, guidance_scale=3.5):
-    ptp_utils.register_attention_control(pipe, controller)
     with torch.no_grad():
         latent = pipe.vae.encode(tfms.functional.to_tensor(input_image).unsqueeze(0).to(device)*2-1)
     l = 0.18215 * latent.latent_dist.sample()
+    # (1, 4, 64, 64)
     inverted_latents = invert(l, input_image_prompt, num_inference_steps=num_steps)
+    # (48, 4, 64, 64)
+    ptp_utils.register_attention_control(pipe, controller)
     final_im = sample(edit_prompt, start_latents=inverted_latents[-(start_step+1)][None],
                       start_step=start_step, num_inference_steps=num_steps, guidance_scale=guidance_scale)[0]
     return final_im
-
-
-
 controller = AttentionStore()
+input_image = load_image('gnochi_mirror.jpeg', size=(512, 512))
+input_image_prompt = "a cat sitting next to a mirror"
+edit_prompt = "a tiger sitting next to a mirror"
 img = edit(controller, input_image, input_image_prompt, edit_prompt, num_steps=NUM_DDIM_STEPS, start_step=START_STEP, guidance_scale=GUIDANCE_SCALE)
-ptp_utils.view_images(img)
 show_cross_attention(controller, 16, ["up", "down"])

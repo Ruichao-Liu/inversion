@@ -13,13 +13,13 @@ from PIL import Image
 
 scheduler = DDIMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", clip_sample=False, set_alpha_to_one=False)
 
-LOW_RESOURCE = False
+LOW_RESOURCE = True
 NUM_DDIM_STEPS = 50
 GUIDANCE_SCALE = 7.5
 MAX_NUM_WORDS = 77
 device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
 ldm_stable = StableDiffusionPipeline.from_pretrained(
-    "/home/lrc/.cache/huggingface/hub/models--CompVis--stable-diffusion-v1-4/snapshots/133a221b8aa7292a167afc5127cb63fb5005638b", scheduler=scheduler).to(device)
+    "runwayml/stable-diffusion-v1-5", scheduler=scheduler).to(device)
 try:
     ldm_stable.disable_xformers_memory_efficient_attention()
 except AttributeError:
@@ -377,7 +377,7 @@ def load_512(image_path, left=0, right=0, top=0, bottom=0):
     elif w < h:
         offset = (h - w) // 2
         image = image[offset:offset + w]
-    image = np.array(Image.fromarray(image).resize((512, 512)))
+    image = np.array(Image.fromarray(image).resize((256, 256)))
     return image
 
 
@@ -608,7 +608,7 @@ def text2image_ldm_stable(
             context = torch.cat([uncond_embeddings[i].expand(*text_embeddings.shape), text_embeddings])
         else:
             context = torch.cat([uncond_embeddings_, text_embeddings])
-        latents = ptp_utils.diffusion_step(model, controller, latents, context, t, guidance_scale, low_resource=False)
+        latents = ptp_utils.diffusion_step(model, controller, latents, context, t, guidance_scale, low_resource=True)
 
     if return_type == 'image':
         image = ptp_utils.latent2image(model.vae, latents)
@@ -632,7 +632,7 @@ def run_and_display(prompts, controller, latent=None, run_baseline=False, genera
     return images, x_t
 
 
-image_path = "./example_images/gnochi_mirror.jpeg"
+image_path = "gnochi_mirror.jpeg"
 prompt = "a cat sitting next to a mirror"
 (image_gt, image_enc), x_t, uncond_embeddings = null_inversion.invert(image_path, prompt, offsets=(0,0,200,0), verbose=True)
 
@@ -646,16 +646,16 @@ ptp_utils.view_images([image_gt, image_enc, image_inv[0]])
 show_cross_attention(controller, 16, ["up", "down"])
 
 
-prompts = ["a cat sitting next to a mirror",
-           "a tiger sitting next to a mirror"
-        ]
-
-cross_replace_steps = {'default_': .8,}
-self_replace_steps = .5
-blend_word = ((('cat',), ("tiger",)))  # for local edit. If it is not local yet - use only the source object: blend_word = ((('cat',), ("cat",))).
-eq_params = {"words": ("tiger",), "values": (2,)}  # amplify attention to the word "tiger" by *2
-
-controller = make_controller(prompts, True, cross_replace_steps, self_replace_steps, blend_word, eq_params)
-images, _ = run_and_display(prompts, controller, run_baseline=False, latent=x_t, uncond_embeddings=uncond_embeddings)
-
-print("Image is highly affected by the self_replace_steps, usually 0.4 is a good default value, but you may want to try the range 0.3,0.4,0.5,0.7 ")
+# prompts = ["a cat sitting next to a mirror",
+#            "a tiger sitting next to a mirror"
+#         ]
+#
+# cross_replace_steps = {'default_': .8,}
+# self_replace_steps = .5
+# blend_word = ((('cat',), ("tiger",)))  # for local edit. If it is not local yet - use only the source object: blend_word = ((('cat',), ("cat",))).
+# eq_params = {"words": ("tiger",), "values": (2,)}  # amplify attention to the word "tiger" by *2
+#
+# controller = make_controller(prompts, True, cross_replace_steps, self_replace_steps, blend_word, eq_params)
+# images, _ = run_and_display(prompts, controller, run_baseline=False, latent=x_t, uncond_embeddings=uncond_embeddings)
+#
+# print("Image is highly affected by the self_replace_steps, usually 0.4 is a good default value, but you may want to try the range 0.3,0.4,0.5,0.7 ")
