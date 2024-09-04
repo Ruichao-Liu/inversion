@@ -30,7 +30,8 @@ def load_image(path, size=None):
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-pipe = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5").to(device)
+# pipe = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5").to(device)
+pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4").to(device)
 
 pipe.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
 
