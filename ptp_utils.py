@@ -58,7 +58,6 @@ def view_images(images, num_rows=1, offset_ratio=0.02):
                 i * num_cols + j]
 
     pil_img = Image.fromarray(image_)
-    pil_img.save("1.png")
     pil_img.show()
 
 
