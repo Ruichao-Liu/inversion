@@ -19,8 +19,8 @@ GUIDANCE_SCALE = 7.5
 MAX_NUM_WORDS = 77
 device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
 ldm_stable = StableDiffusionPipeline.from_pretrained(
-    # "runwayml/stable-diffusion-v1-5", scheduler=scheduler).to(device)
-    "CompVis/stable-diffusion-v1-4", scheduler=scheduler).to(device)
+    "runwayml/stable-diffusion-v1-5", scheduler=scheduler).to(device)
+    # "CompVis/stable-diffusion-v1-4", scheduler=scheduler).to(device)
 try:
     ldm_stable.disable_xformers_memory_efficient_attention()
 except AttributeError:
@@ -378,7 +378,7 @@ def load_512(image_path, left=0, right=0, top=0, bottom=0):
     elif w < h:
         offset = (h - w) // 2
         image = image[offset:offset + w]
-    image = np.array(Image.fromarray(image).resize((256, 256)))
+    image = np.array(Image.fromarray(image).resize((512, 512)))
     return image
 
 
@@ -504,6 +504,7 @@ class NullInversion:
         return image_rec, ddim_latents
 
     # 对未条件嵌入进行优化，以减少图像反向扩散过程中的误差
+    # num_inner_steps: 内部（uncond）优化步数
     def null_optimization(self, latents, num_inner_steps, epsilon):
         uncond_embeddings, cond_embeddings = self.context.chunk(2)
         uncond_embeddings_list = []
@@ -535,6 +536,7 @@ class NullInversion:
             uncond_embeddings_list.append(uncond_embeddings[:1].detach())
             with torch.no_grad():
                 context = torch.cat([uncond_embeddings, cond_embeddings])
+                # 优化后的无条件嵌入，cat后的context，重新生成噪声预测，更新latent_cur（下一步或上一步的latent）
                 latent_cur = self.get_noise_pred(latent_cur, t, False, context)
         bar.close()
         return uncond_embeddings_list
@@ -549,10 +551,15 @@ class NullInversion:
         if verbose:
             print("DDIM inversion...")
         image_rec, ddim_latents = self.ddim_inversion(image_gt)
+        # ddim_latents.shape = (51, 4, 512, 512)
         if verbose:
             print("Null-text optimization...")
+
+        # NTI 可删掉
         uncond_embeddings = self.null_optimization(ddim_latents, num_inner_steps, early_stop_epsilon)
-        return (image_gt, image_rec), ddim_latents[-1], uncond_embeddings
+
+        # return (image_gt, image_rec), ddim_latents[-1], uncond_embeddings
+        return (image_gt, image_rec), ddim_latents, uncond_embeddings
 
     def __init__(self, model):
         scheduler = DDIMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", clip_sample=False,
@@ -633,10 +640,11 @@ def run_and_display(prompts, controller, latent=None, run_baseline=False, genera
     return images, x_t
 
 
-image_path = "gnochi_mirror.jpeg"
+image_path = "data/gnochi_mirror.jpeg"
 prompt = "a cat sitting next to a mirror"
-(image_gt, image_enc), x_t, uncond_embeddings = null_inversion.invert(image_path, prompt, offsets=(0,0,200,0), verbose=True)
-
+# (image_gt, image_enc), x_t, uncond_embeddings = null_inversion.invert(image_path, prompt, offsets=(0,0,200,0), verbose=True)
+(image_gt, image_enc), ddim_latents, uncond_embeddings = null_inversion.invert(image_path, prompt, offsets=(0,0,200,0), verbose=True)
+x_t = ddim_latents[-1]
 print("Modify or remove offsets according to your image!")
 
 prompts = [prompt]
@@ -647,6 +655,38 @@ ptp_utils.view_images([image_gt, image_enc, image_inv[0]])
 show_cross_attention(controller, 16, ["up", "down"])
 
 
+
+
+# import matplotlib.pyplot as plt
+#
+# # 每隔10步选择的索引
+# indices = list(range(0, len(ddim_latents), 10))
+# num_images = len(indices)
+#
+# # 设置图像网格的大小：2行，len(indices)列
+# fig, axes = plt.subplots(2, num_images, figsize=(20, 5))  # 可调整figsize以改变图像大小
+#
+# # 循环每个索引，生成并显示图像
+# for i, idx in enumerate(indices):
+#     # 运行生成代码，得到x_t和image
+#     image, x_t = run_and_display(prompts, controller, run_baseline=False, latent=ddim_latents[idx],
+#                                  uncond_embeddings=uncond_embeddings, verbose=False)
+#
+#     # 在第1行显示x_t
+#     axes[0, i].imshow(x_t)  # 显示x_t
+#     axes[0, i].axis("off")  # 隐藏坐标轴
+#     axes[0, i].set_title(f"Step {idx}")  # 设置标题显示步骤
+#
+#     # 在第2行显示image
+#     axes[1, i].imshow(image)  # 显示image
+#     axes[1, i].axis("off")  # 隐藏坐标轴
+#
+# # 调整子图间的间距
+# plt.tight_layout()
+# plt.savefig('generated_images.png')
+
+
+# # Editing Example 1
 # prompts = ["a cat sitting next to a mirror",
 #            "a tiger sitting next to a mirror"
 #         ]

@@ -147,7 +147,6 @@ def invert(start_latents, prompt, guidance_scale=3.5, num_inference_steps=80,
 
         # Store
         intermediate_latents.append(latents)
-
     return torch.cat(intermediate_latents)
 
 
@@ -190,12 +189,42 @@ def edit(controller, input_image, input_image_prompt, edit_prompt, num_steps=100
     inverted_latents = invert(l, input_image_prompt, num_inference_steps=num_steps)
     # (48, 4, 64, 64)
     ptp_utils.register_attention_control(pipe, controller)
-    final_im = sample(edit_prompt, start_latents=inverted_latents[-(start_step+1)][None],
+    final_im = sample(edit_prompt, start_latents=inverted_latents[-(start_step+1)][None], # 这里的[None]是为了增加一个batch维度
                       start_step=start_step, num_inference_steps=num_steps, guidance_scale=guidance_scale)[0]
     return final_im
 controller = AttentionStore()
-input_image = load_image('gnochi_mirror.jpeg', size=(512, 512))
+input_image = load_image('data/gnochi_mirror.jpeg', size=(512, 512))
 input_image_prompt = "a cat sitting next to a mirror"
 edit_prompt = "a tiger sitting next to a mirror"
-img = edit(controller, input_image, input_image_prompt, edit_prompt, num_steps=NUM_DDIM_STEPS, start_step=START_STEP, guidance_scale=GUIDANCE_SCALE)
-show_cross_attention(controller, 16, ["up", "down"])
+# img = edit(controller, input_image, input_image_prompt, edit_prompt, num_steps=NUM_DDIM_STEPS, start_step=START_STEP, guidance_scale=GUIDANCE_SCALE)
+# img.save("result.png")
+# show_cross_attention(controller, 16, ["up", "down"])
+
+
+
+
+
+import matplotlib.pyplot as plt
+
+# 每隔10步选择的索引
+indices = list(range(0, 48, 12))
+num_images = len(indices)
+
+# 设置图像网格的大小：2行，len(indices)列
+fig, axes = plt.subplots(1, num_images, figsize=(20, 5))  # 可调整figsize以改变图像大小
+
+# 循环每个索引，生成并显示图像
+for i, idx in enumerate(indices):
+    # 运行生成代码，得到x_t和image
+    every_step_img = edit(controller, input_image, input_image_prompt, edit_prompt, num_steps=NUM_DDIM_STEPS,
+               start_step=idx, guidance_scale=GUIDANCE_SCALE)
+
+    # 在第1行显示x_t
+    axes[i].imshow(every_step_img)  # 显示x_t
+    axes[i].axis("off")  # 隐藏坐标轴
+    axes[i].set_title(f"Step {idx}")  # 设置标题显示步骤
+
+
+# 调整子图间的间距
+plt.tight_layout()
+plt.savefig('every_step_images.png')
