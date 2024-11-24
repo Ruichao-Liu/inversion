@@ -656,36 +656,6 @@ show_cross_attention(controller, 16, ["up", "down"])
 
 
 
-
-# import matplotlib.pyplot as plt
-#
-# # 每隔10步选择的索引
-# indices = list(range(0, len(ddim_latents), 10))
-# num_images = len(indices)
-#
-# # 设置图像网格的大小：2行，len(indices)列
-# fig, axes = plt.subplots(2, num_images, figsize=(20, 5))  # 可调整figsize以改变图像大小
-#
-# # 循环每个索引，生成并显示图像
-# for i, idx in enumerate(indices):
-#     # 运行生成代码，得到x_t和image
-#     image, x_t = run_and_display(prompts, controller, run_baseline=False, latent=ddim_latents[idx],
-#                                  uncond_embeddings=uncond_embeddings, verbose=False)
-#
-#     # 在第1行显示x_t
-#     axes[0, i].imshow(x_t)  # 显示x_t
-#     axes[0, i].axis("off")  # 隐藏坐标轴
-#     axes[0, i].set_title(f"Step {idx}")  # 设置标题显示步骤
-#
-#     # 在第2行显示image
-#     axes[1, i].imshow(image)  # 显示image
-#     axes[1, i].axis("off")  # 隐藏坐标轴
-#
-# # 调整子图间的间距
-# plt.tight_layout()
-# plt.savefig('generated_images.png')
-
-
 # # Editing Example 1
 # prompts = ["a cat sitting next to a mirror",
 #            "a tiger sitting next to a mirror"

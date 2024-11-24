@@ -62,6 +62,8 @@ class AttentionStore(AttentionControl):
         key = f"{place_in_unet}_{'cross' if is_cross else 'self'}"
         if attn.shape[1] <= 32 ** 2:  # avoid memory overhead
             self.step_store[key].append(attn)
+            # self.step_store[self.cur_step][key] = []
+            # self.step_store[self.cur_step][key].append(attn.detach().cpu())
         return attn
 
     def between_steps(self):
@@ -87,3 +89,38 @@ class AttentionStore(AttentionControl):
         super(AttentionStore, self).__init__()
         self.step_store = self.get_empty_store()
         self.attention_store = {}
+
+
+
+
+class AttentionExtractor:
+    def __init__(self):
+        self.attention_maps = {}  # 保存注意力图的字典
+
+    def hook_attention(self, module, input, output):
+
+        # 注意力权重通常在输出张量中，例如 output 是 (batch, heads, tokens, tokens)
+        self.attention_maps[self.current_step] = output.detach().cpu()  # 保存到字典中
+
+    def extract_attention(self, model, latents, timesteps, tokenizer=None):
+        """
+        主函数，用于执行扩散模型的每一步推理，并提取注意力图。
+        """
+        # 遍历模型中的注意力层，注册 forward hook
+        hooks = []
+        for name, module in model.named_modules():
+            if isinstance(module, torch.nn.MultiheadAttention):  # 替换为你的注意力模块类
+                hooks.append(module.register_forward_hook(self.hook_attention))
+
+        self.attention_maps = {}  # 重置注意力图存储
+        for step, t in enumerate(timesteps):
+            self.current_step = t
+            # 在当前时间步进行推理
+            with torch.no_grad():
+                _ = model(latents, t)  # 替换为你的模型调用方式
+
+        # 清理 hook
+        for hook in hooks:
+            hook.remove()
+
+        return self.attention_maps

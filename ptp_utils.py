@@ -34,7 +34,7 @@ def text_under_image(image: np.ndarray, text: str, text_color: Tuple[int, int, i
     return img
 
 
-def view_images(images, num_rows=1, offset_ratio=0.02):
+def view_images(images, num_rows=1, offset_ratio=0.02, step_idx=None):
     if type(images) is list:
         num_empty = len(images) % num_rows
     elif images.ndim == 4:
@@ -58,7 +58,31 @@ def view_images(images, num_rows=1, offset_ratio=0.02):
                 i * num_cols + j]
 
     pil_img = Image.fromarray(image_)
-    pil_img.save("cross_attention.png")
+    pil_img.save(f"results/cross_attention_{step_idx}.png")
+
+import matplotlib.pyplot as plt
+
+all_step_similarities = []
+all_step_idxs = []
+
+
+def view_similarity(every_step_similarity, step_idx, tokens):
+    global all_step_similarities
+    global all_step_idxs
+
+    # 将当前步的数据添加到全局存储中
+    all_step_similarities.append(every_step_similarity)
+    all_step_idxs.append(step_idx)
+    if step_idx==48:  # (NUM_DDIM_STEPS-1)
+        # 所有步骤完成后，绘制曲线图
+        plt.figure(figsize=(15, 10))
+        for i in range(len(tokens)):
+            step_similarities = np.array([single_step_similarities[i] for single_step_similarities in all_step_similarities])
+            plt.plot(all_step_idxs, step_similarities, label=f'Token {i}')
+        plt.xlabel('Step')
+        plt.ylabel('Similarity')
+        plt.legend()
+        plt.savefig('every_step_similarity.png')
 
 
 def diffusion_step(model, controller, latents, context, t, guidance_scale, low_resource=False):
